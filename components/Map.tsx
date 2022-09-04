@@ -8,6 +8,7 @@ import { useTooltip, useTooltipInPortal } from "@visx/tooltip";
 import { localPoint } from "@visx/event";
 import { Point } from "@visx/point";
 import { Group } from "@visx/group";
+import { Zoom } from "@visx/zoom";
 
 export const background = "#f9f7e8";
 
@@ -34,7 +35,7 @@ const world = topojson.feature(topology, topology.objects.units) as {
 const Map = ({ width, height, countries }: GeoMercatorProps) => {
   const centerX = width / 2;
   const centerY = height / 2;
-  const scale = (width / 630) * 100;
+  const initialScale = (width / 630) * 100;
 
   // TOOLTIP CRAP
   const {
@@ -117,97 +118,198 @@ const Map = ({ width, height, countries }: GeoMercatorProps) => {
   };
 
   return width < 10 ? null : (
-    <svg width={width} height={height} ref={containerRef}>
-      <rect
-        x={0}
-        y={0}
+    <>
+      <Zoom<SVGSVGElement>
         width={width}
         height={height}
-        fill={background}
-        rx={14}
-      />
-      <NaturalEarth<FeatureShape>
-        data={world.features}
-        scale={scale}
-        translate={[centerX, centerY + 50]}
+        scaleXMin={100}
+        scaleXMax={1000}
+        scaleYMin={100}
+        scaleYMax={1000}
+        initialTransformMatrix={{
+          scaleX: initialScale,
+          scaleY: initialScale,
+          translateX: centerX,
+          translateY: centerY,
+          skewX: 0,
+          skewY: 0,
+        }}
       >
-        {(mercator) => (
-          <g>
-            <Graticule
-              graticule={(g) => mercator.path(g) || ""}
-              stroke="rgba(33,33,33,0.05)"
-            />
-            {mercator.features.map(({ feature, path, projection }, i) => {
-              const coords: [number, number] | null = projection(
-                geoCentroid(feature)
-              );
+        {(zoom) => (
+          <div className="container" ref={containerRef}>
+            <svg
+              ref={zoom.containerRef}
+              width={width}
+              height={height}
+              onTouchStart={zoom.dragStart}
+              onTouchMove={zoom.dragMove}
+              onTouchEnd={zoom.dragEnd}
+              onMouseDown={zoom.dragStart}
+              onMouseMove={zoom.dragMove}
+              onMouseUp={zoom.dragEnd}
+              onMouseLeave={() => {
+                if (zoom.isDragging) zoom.dragEnd();
+              }}
+            >
+              <rect
+                x={0}
+                y={0}
+                width={width}
+                height={height}
+                fill={background}
+                rx={14}
+              />
+              <NaturalEarth<FeatureShape>
+                data={world.features}
+                scale={zoom.transformMatrix.scaleX}
+                translate={[
+                  zoom.transformMatrix.translateX,
+                  zoom.transformMatrix.translateY,
+                ]}
+              >
+                {(mercator) => (
+                  <g>
+                    <Graticule
+                      graticule={(g) => mercator.path(g) || ""}
+                      stroke="rgba(33,33,33,0.05)"
+                    />
+                    {mercator.features.map(
+                      ({ feature, path, projection }, i) => {
+                        const coords: [number, number] | null = projection(
+                          geoCentroid(feature)
+                        );
 
-              const countryData = countries.find(
-                (country) => country.code === feature.id
-              );
-              return (
-                <Group
-                  key={`map-feature-${i}`}
-                  onMouseOver={(e) =>
-                    countryData && handleMouseOver(e, countryData)
-                  }
-                  onMouseOut={hideTooltip}
+                        const countryData = countries.find(
+                          (country) => country.code === feature.id
+                        );
+                        return (
+                          <Group
+                            key={`map-feature-${i}`}
+                            onMouseOver={(e) =>
+                              countryData && handleMouseOver(e, countryData)
+                            }
+                            onMouseOut={hideTooltip}
+                          >
+                            <path
+                              d={path || ""}
+                              fill={color(feature)}
+                              stroke={background}
+                              strokeWidth={0.5}
+                              onClick={() => {
+                                console.log(countryData);
+                              }}
+                            />
+                            <text
+                              transform={`translate(${coords})`}
+                              fontSize={Math.max(width / 125, 5)}
+                              style={stylesObj}
+                              textAnchor="middle"
+                            >
+                              {countryData ? countryData.code : ""}
+                            </text>
+                          </Group>
+                        );
+                      }
+                    )}
+                  </g>
+                )}
+              </NaturalEarth>
+              {tooltipOpen && tooltipData && (
+                <TooltipInPortal
+                  // set this to random so it correctly updates with parent bounds
+                  key={Math.random()}
+                  top={tooltipTop}
+                  left={tooltipLeft}
                 >
-                  <path
-                    d={path || ""}
-                    fill={color(feature)}
-                    stroke={background}
-                    strokeWidth={0.5}
-                    onClick={() => {
-                      console.log(countryData);
-                    }}
-                  />
-                  <text
-                    transform={`translate(${coords})`}
-                    fontSize={Math.max(width / 125, 5)}
-                    style={stylesObj}
-                    textAnchor="middle"
-                  >
-                    {countryData ? countryData.code : ""}
-                  </text>
-                </Group>
-              );
-            })}
-          </g>
+                  {
+                    //@ts-ignore
+                    tooltipData.name ? (
+                      <div style={{ maxWidth: 200 }}>
+                        <strong>
+                          {
+                            //@ts-ignore
+                            tooltipData.name
+                          }
+                        </strong>
+                        <br />
+                        <small>
+                          {
+                            //@ts-ignore
+                            tooltipData.contentSnippet
+                          }
+                        </small>
+                      </div>
+                    ) : (
+                      "Ei tietoja."
+                    )
+                  }
+                </TooltipInPortal>
+              )}
+            </svg>
+            <div className="controls">
+              <button
+                className="btn btn-zoom"
+                onClick={() => zoom.scale({ scaleX: 1.2, scaleY: 1.2 })}
+              >
+                +
+              </button>
+              <button
+                className="btn btn-zoom btn-bottom"
+                onClick={() => zoom.scale({ scaleX: 0.8, scaleY: 0.8 })}
+              >
+                -
+              </button>
+              <button className="btn btn-lg" onClick={zoom.reset}>
+                Reset
+              </button>
+            </div>
+          </div>
         )}
-      </NaturalEarth>
-      {tooltipOpen && tooltipData && (
-        <TooltipInPortal
-          // set this to random so it correctly updates with parent bounds
-          key={Math.random()}
-          top={tooltipTop}
-          left={tooltipLeft}
-        >
-          {
-            //@ts-ignore
-            tooltipData.name ? (
-              <div style={{ maxWidth: 200 }}>
-                <strong>
-                  {
-                    //@ts-ignore
-                    tooltipData.name
-                  }
-                </strong>
-                <br />
-                <small>
-                  {
-                    //@ts-ignore
-                    tooltipData.contentSnippet
-                  }
-                </small>
-              </div>
-            ) : (
-              "Ei tietoja."
-            )
-          }
-        </TooltipInPortal>
-      )}
-    </svg>
+      </Zoom>
+      <style jsx>{`
+        .container {
+          position: relative;
+        }
+        svg {
+          cursor: grab;
+        }
+        svg.dragging {
+          cursor: grabbing;
+        }
+        .btn {
+          margin: 0;
+          text-align: center;
+          border: none;
+          background: #dde1fe;
+          color: #222;
+          padding: 0 4px;
+          border-top: 1px solid #8993f9;
+        }
+        .btn-lg {
+          font-size: 12px;
+          line-height: 1;
+          padding: 4px;
+        }
+        .btn-zoom {
+          width: 26px;
+          font-size: 22px;
+        }
+        .btn-bottom {
+          margin-bottom: 1rem;
+        }
+        .controls {
+          position: absolute;
+          bottom: 20px;
+          right: 15px;
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+        }
+        label {
+          font-size: 12px;
+        }
+      `}</style>
+    </>
   );
 };
 
