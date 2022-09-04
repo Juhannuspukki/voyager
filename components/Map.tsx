@@ -289,6 +289,7 @@ const Map = ({ width, height, countries }: GeoMercatorProps) => {
           </div>
         )}
       </Zoom>
+      {/* eslint-disable-next-line react/no-unknown-property */}
       <style jsx>{`
         .container {
           position: relative;
