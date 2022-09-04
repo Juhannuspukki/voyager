@@ -43,7 +43,7 @@ const Home = (props: { countries: CountryData[] }) => {
   );
 };
 
-export async function getServerSideProps() {
+export async function getStaticProps() {
   let parser = new Parser();
 
   const countries: CountryData[] = [];
@@ -107,6 +107,7 @@ export async function getServerSideProps() {
     props: {
       countries,
     },
+    revalidate: 86400,
   };
 }
 
