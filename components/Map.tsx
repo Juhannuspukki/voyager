@@ -3,7 +3,7 @@ import { Graticule, NaturalEarth } from "@visx/geo";
 import * as topojson from "topojson-client";
 import topology from "./../topology.json";
 import { CountryData } from "../pages";
-import { geoCentroid } from "d3-geo";
+import { geoArea, geoCentroid } from "d3-geo";
 import { useTooltip, useTooltipInPortal } from "@visx/tooltip";
 import { localPoint } from "@visx/event";
 import { Point } from "@visx/point";
@@ -30,6 +30,24 @@ interface FeatureShape {
 const world = topojson.feature(topology, topology.objects.units) as {
   type: "FeatureCollection";
   features: FeatureShape[];
+};
+
+const showNameBasedOnScale = (name: string, area: number, scale: number) => {
+  if (scale < 250) {
+    return area > 0.015 ? name : "";
+  } else if (scale < 300) {
+    return area > 0.008 ? name : "";
+  } else if (scale < 360) {
+    return area > 0.006 ? name : "";
+  } else if (scale < 420) {
+    return area > 0.004 ? name : "";
+  } else if (scale < 480) {
+    return area > 0.003 ? name : "";
+  } else if (scale < 600) {
+    return area > 0.002 ? name : "";
+  } else {
+    return name;
+  }
 };
 
 const Map = ({ width, height, countries }: GeoMercatorProps) => {
@@ -60,8 +78,6 @@ const Map = ({ width, height, countries }: GeoMercatorProps) => {
       event.currentTarget.ownerSVGElement!,
       event
     );
-
-    console.log(datum);
 
     if (!datum) {
       return;
@@ -179,6 +195,8 @@ const Map = ({ width, height, countries }: GeoMercatorProps) => {
                           geoCentroid(feature)
                         );
 
+                        const area = geoArea(feature);
+
                         const countryData = countries.find(
                           (country) => country.code === feature.id
                         );
@@ -205,7 +223,12 @@ const Map = ({ width, height, countries }: GeoMercatorProps) => {
                               style={stylesObj}
                               textAnchor="middle"
                             >
-                              {countryData ? countryData.code : ""}
+                              {countryData &&
+                                showNameBasedOnScale(
+                                  countryData.code,
+                                  area,
+                                  zoom.transformMatrix.scaleX
+                                )}
                             </text>
                           </Group>
                         );
